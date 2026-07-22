@@ -1,0 +1,104 @@
+groups:
+  - name: container-status
+    interval: 30s
+
+    rules:
+      - alert: NodeExporterTargetDown
+        expr: |
+          up{job=~".*-node-exporter"} == 0
+        for: 2m
+
+        labels:
+          project: llm
+          environment: dev
+          source: prometheus
+          component: ecs
+          severity: high
+
+        annotations:
+          summary: "Node Exporter target is unavailable"
+          description: >-
+            Node Exporter target
+            {{ $labels.instance }}
+            from job {{ $labels.job }}
+            is unavailable.
+
+      - alert: ApplicationTargetDown
+        expr: |
+          up{
+            job=~"prometheus|grafana|alertmanager"
+          } == 0
+        for: 2m
+
+        labels:
+          project: llm
+          environment: dev
+          source: prometheus
+          component: ecs
+          severity: high
+
+        annotations:
+          summary: "Application metrics endpoint is unavailable"
+          description: >-
+            Target {{ $labels.instance }}
+            from job {{ $labels.job }}
+            is unavailable.
+
+      - alert: HighNodeCPU
+        expr: |
+          100 *
+          (
+            1 -
+            avg by (job, instance) (
+              rate(
+                node_cpu_seconds_total{
+                  job=~".*-node-exporter",
+                  mode="idle"
+                }[5m]
+              )
+            )
+          ) > 80
+        for: 5m
+
+        labels:
+          project: llm
+          environment: dev
+          source: prometheus
+          component: ecs
+          severity: warning
+
+        annotations:
+          summary: "High Node Exporter CPU value"
+          description: >-
+            CPU value reported by {{ $labels.instance }}
+            is above 80 percent.
+
+      - alert: HighNodeMemory
+        expr: |
+          100 *
+          (
+            1 -
+            (
+              node_memory_MemAvailable_bytes{
+                job=~".*-node-exporter"
+              }
+              /
+              node_memory_MemTotal_bytes{
+                job=~".*-node-exporter"
+              }
+            )
+          ) > 80
+        for: 5m
+
+        labels:
+          project: llm
+          environment: dev
+          source: prometheus
+          component: ecs
+          severity: warning
+
+        annotations:
+          summary: "High Node Exporter memory value"
+          description: >-
+            Memory value reported by {{ $labels.instance }}
+            is above 80 percent.
