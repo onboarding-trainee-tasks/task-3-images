@@ -23,7 +23,7 @@ datasources:
     uid: alertmanager
     type: alertmanager
     access: proxy
-    url: http://alertmanager.llm.local:9090
+    url: http://alertmanager.llm.local:9093
     isDefault: false
     editable: true
 

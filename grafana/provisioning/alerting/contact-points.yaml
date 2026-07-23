@@ -1,0 +1,10 @@
+apiVersion: 1
+contactPoints:
+    - orgId: 1
+      name: alertmanager
+      receivers:
+        - uid: efsyl6evszrwgd
+          type: prometheus-alertmanager
+          settings:
+            url: http://alertmanager.llm.local:9093
+          disableResolveMessage: false
