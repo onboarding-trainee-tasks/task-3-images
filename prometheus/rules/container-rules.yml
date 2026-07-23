@@ -10,7 +10,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: prometheus
           component: ecs
           severity: high
@@ -32,7 +32,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: prometheus
           component: ecs
           severity: high
@@ -62,7 +62,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: prometheus
           component: ecs
           severity: warning
@@ -92,7 +92,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: prometheus
           component: ecs
           severity: warning

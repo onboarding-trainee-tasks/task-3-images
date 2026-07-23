@@ -8,7 +8,7 @@ groups:
 
     rules:
       - uid: llmdevcpuhigh
-        title: "[llm]-[dev]-[ecs]-[high]-[cpu]"
+        title: "[llm]-[test]-[ecs]-[high]-[cpu]"
         condition: C
 
         data:
@@ -90,7 +90,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: grafana
           component: ecs
           metric: cpu
@@ -102,7 +102,7 @@ groups:
         isPaused: false
 
       - uid: llmdevcpulow
-        title: "[llm]-[dev]-[ecs]-[low]-[cpu]"
+        title: "[llm]-[test]-[ecs]-[low]-[cpu]"
         condition: C
 
         data:
@@ -184,7 +184,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: grafana
           component: ecs
           metric: cpu
@@ -196,7 +196,7 @@ groups:
         isPaused: false
 
       - uid: llmdevmemhigh
-        title: "[llm]-[dev]-[ecs]-[high]-[memory]"
+        title: "[llm]-[test]-[ecs]-[high]-[memory]"
         condition: C
 
         data:
@@ -279,7 +279,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: grafana
           component: ecs
           metric: memory
@@ -291,7 +291,7 @@ groups:
         isPaused: false
 
       - uid: llmdevmemlow
-        title: "[llm]-[dev]-[ecs]-[low]-[memory]"
+        title: "[llm]-[test]-[ecs]-[low]-[memory]"
         condition: C
 
         data:
@@ -374,7 +374,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: grafana
           component: ecs
           metric: memory
@@ -386,7 +386,7 @@ groups:
         isPaused: false
 
       - uid: llmdevdiskhigh
-        title: "[llm]-[dev]-[ecs]-[high]-[disk-space]"
+        title: "[llm]-[test]-[ecs]-[high]-[disk-space]"
         condition: C
 
         data:
@@ -474,7 +474,7 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: grafana
           component: ecs
           metric: disk-space
@@ -486,7 +486,7 @@ groups:
         isPaused: false
 
       - uid: llmdevdisklow
-        title: "[llm]-[dev]-[ecs]-[low]-[disk-space]"
+        title: "[llm]-[test]-[ecs]-[low]-[disk-space]"
         condition: C
 
         data:
@@ -574,11 +574,454 @@ groups:
 
         labels:
           project: llm
-          environment: dev
+          environment: test
           source: grafana
           component: ecs
           metric: disk-space
           severity: low
+
+        notification_settings:
+          receiver: alertmanager
+
+        isPaused: false
+  
+  - orgId: 1
+    name: ECS service availability
+    folder: Infrastructure
+    interval: 30s
+
+    rules:
+      - uid: llmtestprometheusdown
+        title: "[llm]-[test]-[ecs]-[high]-[prometheus-down]"
+        condition: C
+
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+
+              editorMode: code
+
+              expr: |-
+                1 - clamp_max(
+                  sum(up{job="prometheus"}) or vector(0),
+                  1
+                )
+
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+
+          - refId: C
+            datasourceUid: __expr__
+
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+
+                  operator:
+                    type: and
+
+                  query:
+                    params: []
+
+                  reducer:
+                    params: []
+                    type: avg
+
+                  type: query
+
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 2m
+
+        annotations:
+          summary: "Prometheus service is unavailable"
+          description: >-
+            Prometheus self-scrape is unavailable, or the Prometheus
+            datasource cannot be queried.
+
+        labels:
+          project: llm
+          environment: test
+          source: grafana
+          component: ecs
+          service: prometheus
+          metric: availability
+          severity: high
+
+        notification_settings:
+          receiver: alertmanager
+
+        isPaused: false
+
+      - uid: llmtestgrafanadown
+        title: "[llm]-[test]-[ecs]-[high]-[grafana-down]"
+        condition: C
+
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+
+              editorMode: code
+
+              expr: |-
+                1 - clamp_max(
+                  sum(up{job="grafana"}) or vector(0),
+                  1
+                )
+
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+
+          - refId: C
+            datasourceUid: __expr__
+
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+
+                  operator:
+                    type: and
+
+                  query:
+                    params: []
+
+                  reducer:
+                    params: []
+                    type: avg
+
+                  type: query
+
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+
+        annotations:
+          summary: "Grafana service is unavailable"
+          description: >-
+            Prometheus cannot scrape the Grafana metrics endpoint.
+
+        labels:
+          project: llm
+          environment: test
+          source: grafana
+          component: ecs
+          service: grafana
+          metric: availability
+          severity: high
+
+        notification_settings:
+          receiver: alertmanager
+
+        isPaused: false
+
+      - uid: llmtestopenwebuidown
+        title: "[llm]-[test]-[ecs]-[high]-[open-webui-down]"
+        condition: C
+
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+
+              editorMode: code
+
+              expr: |-
+                1 - clamp_max(
+                  sum(up{job="open-webui-node-exporter"}) or vector(0),
+                  1
+                )
+
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+
+          - refId: C
+            datasourceUid: __expr__
+
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+
+                  operator:
+                    type: and
+
+                  query:
+                    params: []
+
+                  reducer:
+                    params: []
+                    type: avg
+
+                  type: query
+
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+
+        annotations:
+          summary: "Open WebUI ECS task is unavailable"
+          description: >-
+            The Open WebUI task disappeared from service discovery,
+            or its Node Exporter scrape is failing.
+
+        labels:
+          project: llm
+          environment: test
+          source: grafana
+          component: ecs
+          service: open-webui
+          metric: availability
+          severity: high
+
+        notification_settings:
+          receiver: alertmanager
+
+        isPaused: false
+
+      - uid: llmtestollamadegraded
+        title: "[llm]-[test]-[ecs]-[high]-[ollama-replica-down]"
+        condition: C
+
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+
+              editorMode: code
+
+              expr: |-
+                2 - clamp_max(
+                  sum(up{job="ollama-node-exporter"}) or vector(0),
+                  2
+                )
+
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+
+          - refId: C
+            datasourceUid: __expr__
+
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+
+                  operator:
+                    type: and
+
+                  query:
+                    params: []
+
+                  reducer:
+                    params: []
+                    type: avg
+
+                  type: query
+
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+
+        annotations:
+          summary: "One or more Ollama replicas are unavailable"
+          description: >-
+            Fewer than two Ollama task Node Exporter targets are healthy.
+
+        labels:
+          project: llm
+          environment: test
+          source: grafana
+          component: ecs
+          service: ollama
+          metric: availability
+          severity: high
+
+        notification_settings:
+          receiver: alertmanager
+
+        isPaused: false
+
+      - uid: llmtestalertmanagerdown
+        title: "[llm]-[test]-[ecs]-[high]-[alertmanager-down]"
+        condition: C
+
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+
+              editorMode: code
+
+              expr: |-
+                1 - clamp_max(
+                  sum(up{job="alertmanager"}) or vector(0),
+                  1
+                )
+
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+
+          - refId: C
+            datasourceUid: __expr__
+
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+
+                  operator:
+                    type: and
+
+                  query:
+                    params: []
+
+                  reducer:
+                    params: []
+                    type: avg
+
+                  type: query
+
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+
+        annotations:
+          summary: "Alertmanager service is unavailable"
+          description: >-
+            Prometheus cannot scrape the Alertmanager metrics endpoint.
+
+        labels:
+          project: llm
+          environment: test
+          source: grafana
+          component: ecs
+          service: alertmanager
+          metric: availability
+          severity: high
 
         notification_settings:
           receiver: alertmanager
