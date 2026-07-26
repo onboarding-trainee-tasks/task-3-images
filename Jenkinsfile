@@ -34,7 +34,7 @@ pipeline {
 
         MODEL_REGION = 'eu-central-1'
         MODEL_BUCKET = (
-            'llm-models-583955898731-eu-central-1'
+            'tinyllama-llm'
         )
         MODEL_OBJECT_KEY = (
             'ollama/tinyllama-models.tar.gz'
