@@ -7,10 +7,21 @@ pipeline {
     }
 
     parameters {
+        choice(
+            name: 'IMAGE_NAME',
+            choices: [
+                'grafana',
+                'prometheus',
+                'alertmanager',
+                'ollama-tinyllama'
+            ],
+            description: 'Docker image to build and push'
+        )
+
         string(
-            name: 'VERSION_PREFIX',
-            defaultValue: '1.0',
-            description: 'Version prefix. Jenkins adds BUILD_NUMBER.'
+            name: 'IMAGE_TAG',
+            defaultValue: '',
+            description: 'Image tag, for example 1.0.4 or 13.1.1-llm9'
         )
     }
 
@@ -33,26 +44,86 @@ pipeline {
         )
 
         MODEL_REGION = 'eu-central-1'
-        MODEL_BUCKET = (
-            'tinyllama-llm'
-        )
+        MODEL_BUCKET = 'tinyllama-llm'
         MODEL_OBJECT_KEY = (
             'ollama/tinyllama-models.tar.gz'
         )
     }
 
     stages {
-        stage('Prepare version') {
+        stage('Prepare build') {
             steps {
                 script {
-                    env.IMAGE_TAG = (
-                        "${params.VERSION_PREFIX}.${env.BUILD_NUMBER}"
-                    )
+                    if (!params.IMAGE_TAG?.trim()) {
+                        error('IMAGE_TAG cannot be empty.')
+                    }
 
-                    currentBuild.description = env.IMAGE_TAG
+                    if (params.IMAGE_TAG.contains(' ')) {
+                        error('IMAGE_TAG cannot contain spaces.')
+                    }
+
+                    env.IMAGE_TAG = params.IMAGE_TAG.trim()
+
+                    switch (params.IMAGE_NAME) {
+                        case 'grafana':
+                            env.IMAGE_CONTEXT = './grafana'
+                            env.FULL_IMAGE_NAME = (
+                                "${env.PRIVATE_ECR_REGISTRY}/" +
+                                "grafana:${env.IMAGE_TAG}"
+                            )
+                            env.TF_TAG_VARIABLE = (
+                                'grafana_image_tag'
+                            )
+                            break
+
+                        case 'prometheus':
+                            env.IMAGE_CONTEXT = './prometheus'
+                            env.FULL_IMAGE_NAME = (
+                                "${env.PUBLIC_ECR_REGISTRY}/" +
+                                "prometheus:${env.IMAGE_TAG}"
+                            )
+                            env.TF_TAG_VARIABLE = (
+                                'prometheus_image_tag'
+                            )
+                            break
+
+                        case 'alertmanager':
+                            env.IMAGE_CONTEXT = './alertmanager'
+                            env.FULL_IMAGE_NAME = (
+                                "${env.PUBLIC_ECR_REGISTRY}/" +
+                                "alertmanager:${env.IMAGE_TAG}"
+                            )
+                            env.TF_TAG_VARIABLE = (
+                                'alertmanager_image_tag'
+                            )
+                            break
+
+                        case 'ollama-tinyllama':
+                            env.IMAGE_CONTEXT = './ollama'
+                            env.FULL_IMAGE_NAME = (
+                                "${env.PUBLIC_ECR_REGISTRY}/" +
+                                "ollama-tinyllama:${env.IMAGE_TAG}"
+                            )
+                            env.TF_TAG_VARIABLE = (
+                                'ollama_image_tag'
+                            )
+                            break
+
+                        default:
+                            error(
+                                "Unsupported image: " +
+                                params.IMAGE_NAME
+                            )
+                    }
+
+                    currentBuild.description = (
+                        "${params.IMAGE_NAME}:${env.IMAGE_TAG}"
+                    )
                 }
 
+                echo "Selected image: ${params.IMAGE_NAME}"
                 echo "Image tag: ${env.IMAGE_TAG}"
+                echo "Full image name: ${env.FULL_IMAGE_NAME}"
             }
         }
 
@@ -67,9 +138,6 @@ pipeline {
                     echo "Current workspace:"
                     pwd
 
-                    echo "Docker config:"
-                    echo "$DOCKER_CONFIG"
-
                     git --version
                     docker --version
                     aws --version
@@ -80,18 +148,22 @@ pipeline {
                     echo "AWS identity:"
                     aws sts get-caller-identity
 
-                    echo "Jenkins Docker configuration:"
+                    echo "Docker configuration:"
                     cat "$DOCKER_CONFIG/config.json"
                 '''
             }
         }
 
         stage('Download TinyLlama model') {
+            when {
+                expression {
+                    params.IMAGE_NAME == 'ollama-tinyllama'
+                }
+            }
+
             steps {
                 sh '''
                     set -eu
-
-                    echo "Removing previous temporary model files"
 
                     rm -rf ollama/models
                     rm -rf .jenkins-downloads
@@ -114,8 +186,6 @@ pipeline {
                         .jenkins-downloads/tinyllama-models.tar.gz \
                         -C ollama/models/models
 
-                    echo "Checking Ollama model structure"
-
                     test -d ollama/models/models/blobs
                     test -d ollama/models/models/manifests
 
@@ -128,90 +198,28 @@ pipeline {
             }
         }
 
-        stage('Build Grafana') {
+        stage('Build image') {
             steps {
                 sh '''
                     set -eu
+
+                    echo "Building $FULL_IMAGE_NAME"
 
                     docker build \
-                        --tag \
-                        "$PRIVATE_ECR_REGISTRY/grafana:$IMAGE_TAG" \
-                        ./grafana
+                        --tag "$FULL_IMAGE_NAME" \
+                        "$IMAGE_CONTEXT"
                 '''
             }
         }
 
-        stage('Build Prometheus') {
+        stage('Push image') {
             steps {
                 sh '''
                     set -eu
 
-                    docker build \
-                        --tag \
-                        "$PUBLIC_ECR_REGISTRY/prometheus:$IMAGE_TAG" \
-                        ./prometheus
-                '''
-            }
-        }
+                    echo "Pushing $FULL_IMAGE_NAME"
 
-        stage('Build Alertmanager') {
-            steps {
-                sh '''
-                    set -eu
-
-                    docker build \
-                        --tag \
-                        "$PUBLIC_ECR_REGISTRY/alertmanager:$IMAGE_TAG" \
-                        ./alertmanager
-                '''
-            }
-        }
-
-        stage('Build Ollama') {
-            steps {
-                sh '''
-                    set -eu
-
-                    docker build \
-                        --tag \
-                        "$PUBLIC_ECR_REGISTRY/ollama-tinyllama:$IMAGE_TAG" \
-                        ./ollama
-                '''
-            }
-        }
-
-        stage('Push Grafana') {
-            steps {
-                sh '''
-                    set -eu
-
-                    echo "Pushing Grafana to private ECR"
-
-                    docker push \
-                        "$PRIVATE_ECR_REGISTRY/grafana:$IMAGE_TAG"
-                '''
-            }
-        }
-
-        stage('Push public images') {
-            steps {
-                sh '''
-                    set -eu
-
-                    echo "Pushing Prometheus to public ECR"
-
-                    docker push \
-                        "$PUBLIC_ECR_REGISTRY/prometheus:$IMAGE_TAG"
-
-                    echo "Pushing Alertmanager to public ECR"
-
-                    docker push \
-                        "$PUBLIC_ECR_REGISTRY/alertmanager:$IMAGE_TAG"
-
-                    echo "Pushing Ollama to public ECR"
-
-                    docker push \
-                        "$PUBLIC_ECR_REGISTRY/ollama-tinyllama:$IMAGE_TAG"
+                    docker push "$FULL_IMAGE_NAME"
                 '''
             }
         }
@@ -219,30 +227,43 @@ pipeline {
 
     post {
         success {
-            echo 'All images were built and pushed successfully.'
-            echo "Use IMAGE_TAG=${env.IMAGE_TAG} in Terraform."
+            echo 'Image was built and pushed successfully.'
+            echo "Image: ${env.FULL_IMAGE_NAME}"
+
+            echo 'Update this value in image-tags.auto.tfvars:'
+            echo (
+                "${env.TF_TAG_VARIABLE} = " +
+                "\"${env.IMAGE_TAG}\""
+            )
         }
 
-        always {
-            sh '''
-                set +e
+        failure {
+            echo 'Image Pipeline failed. Check the error above.'
+        }
 
-                if [ -n "${IMAGE_TAG:-}" ]; then
-                    docker image rm \
-                        "$PRIVATE_ECR_REGISTRY/grafana:$IMAGE_TAG" \
-                        "$PUBLIC_ECR_REGISTRY/prometheus:$IMAGE_TAG" \
-                        "$PUBLIC_ECR_REGISTRY/alertmanager:$IMAGE_TAG" \
-                        "$PUBLIC_ECR_REGISTRY/ollama-tinyllama:$IMAGE_TAG" \
-                        || true
-                fi
+        cleanup {
+            script {
+                if (getContext(hudson.FilePath)) {
+                    sh '''
+                        set +e
 
-                docker image prune --force || true
-            '''
+                        if [ -n "${FULL_IMAGE_NAME:-}" ]; then
+                            docker image rm \
+                                "$FULL_IMAGE_NAME" \
+                                || true
+                        fi
 
-            cleanWs(
-                deleteDirs: true,
-                disableDeferredWipeout: true
-            )
+                        docker image prune --force || true
+                    '''
+
+                    cleanWs(
+                        deleteDirs: true,
+                        disableDeferredWipeout: true
+                    )
+                } else {
+                    echo 'Workspace was not allocated. Cleanup skipped.'
+                }
+            }
         }
     }
 }
