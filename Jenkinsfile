@@ -58,8 +58,8 @@ pipeline {
                         error('IMAGE_TAG cannot be empty.')
                     }
 
-                    if (params.IMAGE_TAG.contains(' ')) {
-                        error('IMAGE_TAG cannot contain spaces.')
+                    if (!(params.IMAGE_TAG.trim() ==~ /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/)) {
+                        error('IMAGE_TAG is not a valid Docker image tag.')
                     }
 
                     env.IMAGE_TAG = params.IMAGE_TAG.trim()
